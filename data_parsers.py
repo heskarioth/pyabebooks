@@ -1,25 +1,8 @@
-import json
-from typing import List, Type
-from xmlrpc.client import Boolean
-import re
-import numpy as np
 import pandas as pd
+import numpy as np
+from typing import List
+import re 
 
-def generate_retry_intervals():
-    max_retries = 5
-    base_wait = 2.1
-    retry_intervals = [(base_wait**retry_n) + np.random.uniform(0.3,0.8) for retry_n in range(max_retries)]
-    return retry_intervals, max_retries
-
-def check_response(json_response:json,request_type:str='price') -> Boolean:
-    if request_type=='price':
-        if json_response['errorTexts'][0]==None:
-            return True
-        return False
-    else:
-        if len(json_response['widgetResponses'])!=0:
-            return True
-        return False
 
 def parse_response_getPricingDataByISBN(list_responses: List) -> pd.DataFrame:
     df_responses = pd.DataFrame()
@@ -53,3 +36,26 @@ def parse_response_getPricingDataByISBN(list_responses: List) -> pd.DataFrame:
         df_responses = pd.concat([df_responses,pd.DataFrame(dict_response,index=[0])])
     
     return df_responses.reset_index(drop=True)
+
+
+def parse_response_getBookRecommendationByISBN(responses):
+    
+    df_responses = pd.DataFrame()
+    
+    for response in responses:
+        
+        df_response = pd.DataFrame(response['widgetResponses'][0]['recommendationItems'])
+        
+        df_response = df_response[['isbn13','title', 'author', 'thumbNailImgUrl', 'itemLink',]]
+
+        
+        df_responses = pd.concat([df_responses,df_response])
+        
+    return df_responses.reset_index(drop=True)
+
+
+def parse_response_getPricingDataForAuthorTitleByBinding(results):
+    for results in results:
+        if results['pricingInfoForBestAllConditions'] is None:
+            raise ValueError('Book not found.')
+        return pd.DataFrame(results['pricingInfoForBestAllConditions'],index=[0])

@@ -1,85 +1,177 @@
 #improvements to make:
 # parsing and handling of json response to dataframe
 
+import asyncio
 import json
-from xmlrpc.client import Boolean
-from utils import check_response
-import requests
+from typing import List
+import aiohttp
+from utils import generate_retry_intervals
+from data_parsers import parse_response_getPricingDataByISBN, parse_response_getBookRecommendationByISBN, parse_response_getPricingDataForAuthorTitleByBinding
+from aiohttp import ClientSession
+from timing import async_timed
+import aiohttp
 PRICING_SERVICE_ENDPOINT = "https://www.abebooks.com/servlet/DWRestService/pricingservice"
 RECOMMENDATION_SERVICE_ENDPOINT = "https://www.abebooks.com/servlet/RecommendationsApi"
+import pandas as pd
+
+import logging
+from typing import Callable, Awaitable
+import sys
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 class AbeBooks:
 
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     def __init__(self):
-        self.client = requests.Session()
+        self.__failed_payloads = []
+        self.__good_results = []
+        self.history = []
+    
+    async def __sendrequest(self,session:ClientSession,payload:str,url:str,method:str) -> json:
+        retry_intervals,max_retries = generate_retry_intervals()
+        async with session.get(url,params=payload) as result:
+            if result.status!=200:
+                for idx, retry_num in enumerate(range(0,max_retries)):
+                    async with session.request(method,url,params=payload) as result:
+                    #async with session.get(url,params=payload) as result:
+                        if result.status==200:
+                            result = await result.json()
+                            return result
+                    await asyncio.sleep(retry_intervals[idx])
+                
+                # we want our object to return us the actual error code
+                self.__failed_payloads.append(payload)
+                #logging.exception('this is an exception', exc_info=False)
+                raise aiohttp.ClientError()
+            
+            response = await result.json()
+            
+            return response
+    
 
-    def __getprice(self,url,payload)->json:
-        response = self.client.post(url,data=payload)
-        if check_response(response.json(),'price'):
-            return response.json()
-        else:
-            return 'Book not found'
-
-    def getPricingDataByISBN(self,isbn) ->json:
+    @async_timed()
+    async def __sendrequest_main(self,payloads:List,url:str,method) ->json:
+        
         """
         Parameters:
-        - isbn (int) - a book's ISBN13 code
+        - list_isbns (list) - list of isnbs13 books
         """
-        payload = {'action': 'getPricingDataByISBN',
-                   'isbn': isbn,
-                   'container': f'pricingService-{isbn}',
-                   'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.52 Safari/536.5",
-                   'country':'GBP'
-                   }
+        # we also have to limit number of connections on client settings.
+        async with ClientSession() as session:
+            
+            pending = [asyncio.create_task(self.__sendrequest(session,payload,url,method)) for payload in payloads]
+            self.__good_results = []
+            
+            while pending:
+                done, pending = await asyncio.wait(pending,return_when=asyncio.FIRST_EXCEPTION)
+                
+                print(f'Done tasks:{len(done)}')
+                print(f'Pending tasks:{len(pending)}')
+                
+                for done_task in done:
+                    if done_task.exception() is None:
+                        self.__good_results.append(await done_task)
+                    else:
+                        new_tasks = [asyncio.create_task(self.__sendrequest(session,payload,url,method)) for payload in self.__failed_payloads]
+                        self.__failed_payloads = []
+                        for new_task in new_tasks:
+                            pending.add(new_task)
+            
+            
+            return self.__good_results
+    
+    ## funcs for endpoint mains
+    async def __getPricingDataByISBN(self, list_isbns : List) ->pd.DataFrame:
+        list_isbns = list_isbns if (isinstance(list_isbns,list)) else [list_isbns] # make sure user has is using list.
+        payloads = []
+        for isbn in list_isbns:
+            payload = {'action': 'getPricingDataByISBN',
+                    'isbn': isbn,
+                    'container': f'pricingService-{isbn}',
+                    'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.52 Safari/536.5",
+                    'country':'GBP'
+                    }
+            payloads.append(payload)
 
-        return self.__getprice(PRICING_SERVICE_ENDPOINT,payload)
+        results = await self.__sendrequest_main(payloads,PRICING_SERVICE_ENDPOINT,'POST')
+        isbns =  parse_response_getPricingDataByISBN(results)
+        self.history.append(isbns)
+        self.__good_results = []
+        return isbns
 
 
-    def getPricingDataForAuthorTitleByBinding(self,author,title,binding="soft") -> json:
-        """
-        Parameters:
-        - author (str) - book author name
-        - title (str) - book title
-        - binding(str) - this is the book bindingType
-        """
-        if binding.upper()=="HARD":
-            container = "priced-from-hard"
-        elif binding.upper()=="SOFT":
-            container = "priced-from-soft"
-        else:
-            raise ValueError("Invalid parameter. Binding must be either 'hard' or 'soft'")
+    async def __getBookRecommendationByISBN(self,list_isbns:List) -> pd.DataFrame:
+        list_isbns = list_isbns if (isinstance(list_isbns,list)) else [list_isbns] # make sure user has is using list.
+        payloads = []
+        for isbn in list_isbns:
+            payload = {'pageId':'plp','itemIsbn13':isbn}
+            payloads.append(payload)
 
-        payload = {'action': 'getPricingDataForAuthorTitleBindingRefinements',
-                   'an': author,
-                   'tn': title,
-                   'container': container}
+        results = await self.__sendrequest_main(payloads,RECOMMENDATION_SERVICE_ENDPOINT,'GET')
+        isnbs_recommendations = parse_response_getBookRecommendationByISBN(results)
+        self.history.append(isnbs_recommendations)
+        self.__good_results = []
+        return isnbs_recommendations
 
-        return self.__getprice(PRICING_SERVICE_ENDPOINT,payload)
+    async def __getPricingDataForAuthorTitleByBinding(self,author,title,binding="soft") -> json:
+            """
+            Parameters:
+            - author (str) - book author name
+            - title (str) - book title
+            - binding(str) - this is the book bindingType
+            """
+            if binding.upper()=="HARD":
+                container = "priced-from-hard"
+            elif binding.upper()=="SOFT":
+                container = "priced-from-soft"
+            else:
+                raise ValueError("Invalid parameter. Binding must be either 'hard' or 'soft'")
 
-    def getBookRecommendationByISBN(self,isbn):
-        """
-        Parameters:
-        - isbn (str) - book isbn13
-        """ 
-        payload = {
-            'pageId':'plp',
-            'itemIsbn13':isbn
-        }
-        response = requests.get(RECOMMENDATION_SERVICE_ENDPOINT,params=payload)
-        #print(response.raise_for_status(),response.status_code)
-        #return response.json()
-        if check_response(response.json(),'recommendation'):
-            return response.json()
-        else:
-            return 'No recommendations found, make sure you searched for the right ISBN'
+            payloads = [{'action': 'getPricingDataForAuthorTitleBindingRefinements',
+                    'an': author,
+                    'tn': title,
+                    'container': container}]
+            
+            results = await self.__sendrequest_main(payloads,PRICING_SERVICE_ENDPOINT,'POST')
+            prices = parse_response_getPricingDataForAuthorTitleByBinding(results)
+            self.history.append(prices)
+            self.__good_results = []
+            return prices
+
+
+
+
+    # asyncio.main() calls
+    def getPricingDataByISBN(self,list_isbns):
+        results = asyncio.run(self.__getPricingDataByISBN(list_isbns))
+        return results
+
+    def getBookRecommendationByISBN(self,list_isnbs):
+        results = asyncio.run(self.__getBookRecommendationByISBN(list_isbns))
+        return results
+    
+    def getPricingDataForAuthorTitleByBinding(self,author,title,binding):
+        results = asyncio.run(self.__getPricingDataForAuthorTitleByBinding(author,title,binding))
+        return results
 
 if __name__ == "__main__":
     ab = AbeBooks()
     # 9784900737396
-    #r = ab.getPricingDataByISBN("9784900737396")
-    #r = ab.getPricingDataForAuthorTitleByBinding("david goggins","can't hurt me","hard")
+    list_isbns = ['9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396',
+    '9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396',
+    '9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396',
+    '9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396',
+    ]
+    #list_isbns = ['9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396','9784900737396']
+    # 31
+    #list_isbns = '9784900737396'
+    ## This method will find me the cheapest.
+    #r =  ab.getPricingDataByISBN(list_isbns)
+    #r.to_csv('trying.csv',index=False)
+    #x = ab.getBookRecommendationByISBN(list_isbns)
+    #x.to_csv('rec.csv',index=False)
+    r = ab.getPricingDataForAuthorTitleByBinding("david goggins","can't hurt me","hard")
     #r = ab.getPricingDataForAuthorTitleByBinding("david goggins","can't hurt me","soft")
-    r = ab.getBookRecommendationByISBN("9784900737396")
+    #r = ab.getBookRecommendationByISBN("9784900737396")
     print(r)
-
