@@ -32,38 +32,29 @@ book_results  = ab.getPricingDataByISBN(list_isbns)
 
 ### Methods Description:
 
-- *Summary*
-  - Get me an overview of all my crypto holdings. Include total token quantity, dca, profit_loss, price paid, and current asset value.
-    ```python 
+- *getPricingDataByISBN* Blablabla
+```python 
     summary_get_overview_tab(kraken_dca_df,binance_dca_df)
-    ```
-  - Get me all my open orders across all the exchanges.
-    ```python 
-    summary_get_open_orders([kraken_open_orders,binance_open_orders])
-    ```  
-  - Get me how much I have deposited in all my accounts.
-    ```python
-    summary_get_deposits_usd_(kraken_deposit_history,kraken_account_size,binance_deposit_history,binance_account_size)
-    ```
-  - Get me total available spot balance across all exchanges (in BTC and USDT)
-    ```python
-    summary_get_spot_balance(kraken_spot_balance,binance_spot_balance)
-    ```
-  - Get me total savings account balance across all exchanges (in BTC and USDT).
-    ```python 
-    summary_get_savings_balance(binance_savings_overview,kraken_savings_overview)
-    ```
-  - Get me total account size across all exchanges (in BTC and USDT).
-    ```python 
-    summary_get_account_size(binance_account_size,kraken_account_size)
-    ```  
-  - Give my trade history, suggest me selling prices for the crypto I own.
-    ```python
-    summary_get_selling_recomendations_overview(df_portfolio_overview)
-    ```
+```
+- *getBookRecommendationByISBN*
+```python 
+    summary_get_overview_tab(kraken_dca_df,binance_dca_df)
+```
+- *getPricingDataForAuthorTitleByBinding*
+```python 
+    summary_get_overview_tab(kraken_dca_df,binance_dca_df)
+```
+- *getPricingDataForAuthorTitleBDP*
+```python 
+    summary_get_overview_tab(kraken_dca_df,binance_dca_df)
+```
+- *getHighlightInventoryForBookSearch*
+```python 
+    summary_get_overview_tab(kraken_dca_df,binance_dca_df)
+```
 
 ### Future Development
-Currently there are no other major updates in the pipeline for this project as all abebook's available endpoints have been interfaced.
+Currently there are no other major updates in the pipeline for this project as all abebook's available endpoints have been captured.
 For enhancements or additional use case recommendations, please reach out. I love extending my previous projects :).
 
 ### License
