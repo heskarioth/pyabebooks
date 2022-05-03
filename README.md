@@ -1,11 +1,6 @@
 # pyabebooks
 
-wrapper for abebooks.com via asyncio
-# Crypto Investment Tracker
-
-Tired of keeping track of your crypto portfolio across multiple exchanges? 
-Crypto Investment Tracker enables you to keep track of all your crypto holdings across all your providers (currently support for Binance and Kraken.com is enabled). 
-
+wrapper for abebooks.com via asyncio for speeding up your book search.
 
 ### Installation
 
@@ -37,21 +32,19 @@ INVESTED_COINS = ['BTC','ADA','AAVE','HBAR','STX','BNB','MATIC'] # This is the l
 ```
 
 ### Usage
-From terminal, go to location repo was saved and execute below line:
-```cmd
-python3 main.py
+
+```python
+
+ab = Abebooks()
+
+list_isbns = ['9784900737396','020161622X']
+
+book_results  = ab.getPricingDataByISBN(list_isbns)
 
 ```
 
-### Dashboard Documentation
+### Methods Description:
 
-The Dashboard is structured in four parts (or tabs). 
-- ***Summary** tab includes a broad overview of all your portfolio holding across the different exchanges, balances, savings, open orders, selling recommendations, and portfolio asset allocation breakdown, current value and profit_loss.*
-- ***Binance** tab includes all holdings' information including: historical trades, acrrued interest, balances, open orders and profit-loss for the Binance Exchange.*
-- ***Kraken** tab includes all holdings' information including: historical trades, acrrued interest, balances, open orders and profit-loss for the Kraken Exchange.*
-- ***WatchList** tab includes all latest market data for crypto assets in our watchlist. The data here is taken from [CoinGecko](https://www.coingecko.com/en/api/documentation).*
-
-Methods description:
 - *Summary*
   - Get me an overview of all my crypto holdings. Include total token quantity, dca, profit_loss, price paid, and current asset value.
     ```python 
@@ -81,56 +74,6 @@ Methods description:
     ```python
     summary_get_selling_recomendations_overview(df_portfolio_overview)
     ```
-- *Binance*
-  - Get me an overview of all my crypto holdings in Binance. Include total token quantity, dca, profit_loss, price paid, and current asset value.
-    ```python 
-    binance_dca_profit_loss(Binanceclient)
-    ```
-  - Get me all trade history.
-    ```python 
-    binance_get_all_trades(Binanceclient)
-    ```
-  - Get me all pending orders in Binance.
-    ```python 
-    binance_get_open_orders(Binanceclient)
-    ```
-  - Get me all past dividend payments.
-    ```python 
-    binance_get_past_dividends(Binanceclient)
-    ```
-  - Get me Binance savings balance.
-    ```python 
-    binance_get_savings(Binanceclient,binance_interest_history)
-    ```
-  - Get me Binance spot balance.
-    ```python 
-    binance_get_spot_balance(Binanceclient)
-    ```
-  - Get me BInance account size.
-    ```python 
-    binance_get_total_account_size(Binanceclient)
-    ```
-  - Get me fiat deposit history to Binance.
-    ```python
-    binance_get_deposit_history(Binanceclient)
-    ```
-### Dashboard Custimization and Extensions
-
-All the market data extracted for our coins is saved into a sqllite db. This means we can use that data to do other calculations and extend our dashboards.
-If you want to do so, make sure to use the [d2gspread library](https://df2gspread.readthedocs.io/en/latest/examples.html) to speed up data loading to the dashboard:
-```python
-def updater(df,sheetname,clean=True,col_names=True,row_names=False,start_cell='A1'): 
-    d2g.upload(
-        df
-        ,gfile=GOOGLE_SHEET_ID
-        ,wks_name=sheetname
-        ,credentials=creds
-        ,clean=clean
-        ,col_names=col_names
-        ,row_names=row_names
-        ,start_cell=start_cell
-            )
-```
 
 ### Future Development
 Currently there are no other major updates in the pipeline for this project as all abebook's available endpoints have been interfaced.
