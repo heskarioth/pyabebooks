@@ -178,7 +178,5 @@ if __name__ == "__main__":
     r = ab.getHighlightInventoryForBookSearch('9780316017923')
     print("========================")
     #print(ab.history)
-    #r = ab.getPricingDataForAuthorTitleByBinding("david goggins","can't hurt me","soft")
-    #r = ab.getBookRecommendationByISBN("9784900737396")
     print("============")
     print(r)
