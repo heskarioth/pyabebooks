@@ -172,7 +172,7 @@ if __name__ == "__main__":
     #r =  ab.getPricingDataByISBN(list_isbns)
     #r.to_csv('trying.csv',index=False)
     #x = ab.getBookRecommendationByISBN(list_isbns)
-    #x.to_csv('rec.csv',index=False)
+    print('das')
     #r = ab.getPricingDataForAuthorTitleByBinding("david goggins","can't hurt me","hard")
     #r= ab.getPricingDataForAuthorTitleBDP("david goggins","can't hurt me")
     r = ab.getHighlightInventoryForBookSearch('9780316017923')
